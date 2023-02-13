@@ -1,0 +1,127 @@
+--LOOKING AT ALL THE DATA FROM BOTH TABLES
+SELECT *
+FROM `portfolioproject-377323.PortfolioProject1.CovidDeaths`
+WHERE continent is not null
+ORDER BY 3,4
+
+SELECT *
+FROM `portfolioproject-377323.PortfolioProject1.CovidVaccinations` 
+WHERE continent is not null
+ORDER BY 3,4
+
+
+--SELECT DATA WE ARE USING
+
+SELECT continent, location, date, total_cases, new_cases, total_deaths, population
+FROM `portfolioproject-377323.PortfolioProject1.CovidDeaths`
+ORDER BY 1,2
+
+
+--TOTAL CASES VS TOTAL DEATHS
+--(LIKELIHOOD OF DYING IF CONTRACTED COVID PER COUNTRY - US EXAMPLE)
+
+SELECT location, date, total_cases,total_deaths, (total_deaths/total_cases)*100 AS DeathPercentage
+FROM `portfolioproject-377323.PortfolioProject1.CovidDeaths`
+WHERE location like 'United States'
+ORDER BY 1,2
+
+
+--TOTAL CASES VS POPULATION
+--(PERCENTAGE OF PEOPLE THAT GOT COVID PER POPULATION)
+
+SELECT location, date, population, total_cases,(total_cases/population)*100 AS CasePercentage
+FROM `portfolioproject-377323.PortfolioProject1.CovidDeaths`
+WHERE location like 'United States'
+ORDER BY 1,2
+
+
+--COUNTRIES WITH HIGHEST INFECTION RATE PER POPULATION
+
+SELECT location, population, MAX(total_cases) AS HighestInfectionCount,(MAX(total_cases/population))*100 AS PercentPopulationInfected
+FROM `portfolioproject-377323.PortfolioProject1.CovidDeaths`
+--WHERE Location like 'United States'
+GROUP BY location, population
+ORDER BY PercentPopulationInfected DESC
+
+
+--BREAKDOWN BY CONTINENT
+
+SELECT continent, MAX(cast(total_deaths as int)) AS TotalDeathCount
+FROM `portfolioproject-377323.PortfolioProject1.CovidDeaths`
+--WHERE Location like 'United States'
+WHERE continent is not null
+GROUP BY continent
+ORDER BY TotalDeathCount DESC
+
+
+-- CONTINENTS WITH HIGHEST DEATH COUNT PER POPULATION
+
+SELECT continent, MAX(cast(total_deaths as int)) AS TotalDeathCount
+FROM `portfolioproject-377323.PortfolioProject1.CovidDeaths`
+--WHERE Location like 'United States'
+WHERE continent is not null
+GROUP BY continent
+ORDER BY TotalDeathCount DESC
+
+
+-- GLOBAL NUMBERS
+
+SELECT SUM(new_cases) AS Total_cases, SUM(cast(new_deaths as int)) AS Total_deaths, SUM(cast(new_deaths as int))/SUM(new_cases) * 100 AS DeathPercentage
+FROM `portfolioproject-377323.PortfolioProject1.CovidDeaths`
+--WHERE Location like 'United States'
+WHERE continent is not null
+--GROUP BY date
+ORDER BY 1,2
+
+
+--TOTAL POPULATION VS VACCINATIONS
+
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations,
+SUM(Cast(vac.new_vaccinations as int)) OVER (Partition by dea.location Order by dea.location, dea.date) as RollingPeopleVaccinated   
+FROM `portfolioproject-377323.PortfolioProject1.CovidDeaths` dea
+JOIN `portfolioproject-377323.PortfolioProject1.CovidVaccinations` vac
+ON dea.location = vac.location AND dea.date = vac.date
+WHERE dea.continent IS NOT NULL
+ORDER BY 2,3
+
+
+--TEMP TABLE TO MAKE CALCULATIONS
+
+CREATE TEMP TABLE PercentPopulationVaccinated
+(
+      continent string,
+      location string,
+      date datetime,
+      population int64,
+      new_vaccinations int64,
+      AccumVaccinations int64
+);
+
+INSERT INTO PercentPopulationVaccinated
+SELECT dea.continent, dea.location, dea.date, dea.population,vac.new_vaccinations
+, SUM(vac.new_vaccinations) OVER (PARTITION BY dea.location ORDER BY dea.location,dea.date) AS AccumVaccinations
+FROM `portfolioproject-377323.PortfolioProject1.CovidDeaths` dea
+JOIN `portfolioproject-377323.PortfolioProject1.CovidVaccinations` vac
+      ON dea.location = vac.location
+      AND dea.date = vac.date
+WHERE dea.continent IS NOT NULL;
+
+SELECT *, (AccumVaccinations/population)*100
+FROM PercentPopulationVaccinated;
+
+
+-- CREATING A VIEW TO STORE FOR LATER VISUALIZATIONS
+
+CREATE VIEW PercentPopulationVaccinated
+AS
+SELECT dea.continent, dea.location, dea.date, dea.population, vac.new_vaccinations
+, SUM(CONVERT(int,vac.new_vaccinations)) OVER (Partition by dea.Location Order by dea.location, dea.Date) as RollingPeopleVaccinated
+--, (RollingPeopleVaccinated/population)*100
+FROM `portfolioproject-377323.PortfolioProject1.CovidDeaths` dea
+JOIN `portfolioproject-377323.PortfolioProject1.CovidVaccinations`vac
+	ON dea.location = vac.location
+	AND dea.date = vac.date
+WHERE dea.continent IS NOT NULL
+
+SELECT *
+FROM PercentPopulationVaccinated
